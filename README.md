@@ -1,6 +1,6 @@
 # graph-kernel-svm
 
-From-scratch graph kernels for graph classification with reproducible MUTAG experiments.
+From-scratch graph kernels for graph classification with reproducible TU dataset experiments.
 
 ## What this project does
 
@@ -21,19 +21,21 @@ Implemented kernels:
 A precomputed SVM keeps kernel construction separate from classification, allowing the
 same train/test procedure to evaluate every custom kernel matrix.
 
-## Current results on MUTAG
+## Current Results
 
-The full experiment compares the graph-stat baseline, shortest-path kernel, and WL
-depths 0 through 5 over repeated stratified splits. Generated metrics are saved in
-`outputs/mutag_kernel_comparison.csv`, the interpretation is in
-`reports/mutag_kernel_comparison.md`, and figures are written to `outputs/figures/`.
+Experiments support MUTAG, PTC_MR, and PROTEINS. The runner compares the graph-stat
+baseline, shortest-path kernel, and WL depths 0 through 5 over repeated stratified
+splits. Results vary by dataset because graph size, labels, and structural patterns
+differ, so evaluating multiple datasets gives a more useful picture than one benchmark.
 
 ## Commands
 
-Download MUTAG:
+Download each dataset:
 
 ```bash
-.venv/bin/python -m graph_kernel_svm.scripts.download_mutag
+.venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset --dataset MUTAG
+.venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset --dataset PTC_MR
+.venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset --dataset PROTEINS
 ```
 
 Run tests:
@@ -64,11 +66,22 @@ Run the full experiment:
   --test-size 0.25 --seed 42 --normalize --use-cache
 ```
 
+Run all supported datasets:
+
+```bash
+.venv/bin/python -m graph_kernel_svm.scripts.run_all_experiments \
+  --datasets MUTAG PTC_MR PROTEINS --data-root data/raw \
+  --n-splits 10 --test-size 0.25 --seed 42 --normalize --use-cache
+```
+
 Plot results:
 
 ```bash
 .venv/bin/python -m graph_kernel_svm.scripts.plot_results
+.venv/bin/python -m graph_kernel_svm.scripts.plot_all_results
 ```
 
-MUTAG is loaded from `data/raw/MUTAG`. Kernel matrices are cached under
+Raw datasets are stored under `data/raw/{DATASET_NAME}`. Combined metrics are written
+to `outputs/all_datasets_kernel_comparison.csv`, with the report at
+`reports/all_datasets_kernel_comparison.md`. Kernel matrices are cached under
 `outputs/cache/`; add `--force-recompute` to refresh matching entries.

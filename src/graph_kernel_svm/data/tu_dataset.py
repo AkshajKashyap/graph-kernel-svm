@@ -10,6 +10,8 @@ import networkx as nx
 
 from graph_kernel_svm.graphs import GraphExample
 
+SUPPORTED_TU_DATASETS = ("MUTAG", "PTC_MR", "PROTEINS")
+
 
 @dataclass(frozen=True, slots=True)
 class DatasetSummary:

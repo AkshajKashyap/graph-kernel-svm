@@ -18,8 +18,11 @@ dependencies = [
 [project.scripts]
 graph-kernel-svm-train = "graph_kernel_svm.scripts.train_baseline:main"
 graph-kernel-svm-download-mutag = "graph_kernel_svm.scripts.download_mutag:main"
+graph-kernel-svm-download-tu = "graph_kernel_svm.scripts.download_tu_dataset:main"
 graph-kernel-svm-experiments = "graph_kernel_svm.scripts.run_experiments:main"
+graph-kernel-svm-all-experiments = "graph_kernel_svm.scripts.run_all_experiments:main"
 graph-kernel-svm-plot-results = "graph_kernel_svm.scripts.plot_results:main"
+graph-kernel-svm-plot-all-results = "graph_kernel_svm.scripts.plot_all_results:main"
 graph-kernel-svm-inspect-dataset = "graph_kernel_svm.scripts.inspect_dataset:main"
 
 [project.optional-dependencies]

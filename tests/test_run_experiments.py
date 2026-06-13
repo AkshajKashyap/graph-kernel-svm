@@ -81,7 +81,7 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
     assert rows[0]["setting"] == "stats"
     assert rows[1]["setting"] == "shortest_path"
     assert "kernel_time_seconds" in rows[0]
-    assert "# MUTAG Kernel Comparison" in report
+    assert "# synthetic Kernel Comparison" in report
     assert "## Dataset Summary" in report
     assert "## Reproduction" in report
     assert "## Best Method" in report

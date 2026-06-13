@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
 from graph_kernel_svm.data import (
+    SUPPORTED_TU_DATASETS,
     load_synthetic_graph_classification,
     load_tu_dataset,
     summarize_dataset,
@@ -117,7 +118,22 @@ def _train_on_examples(
 def _load_dataset(dataset: str, data_root: Path) -> list[GraphExample]:
     if dataset.lower() == "synthetic":
         return load_synthetic_graph_classification()
-    return load_tu_dataset(data_root / dataset)
+    dataset_name = dataset.upper()
+    if dataset_name not in SUPPORTED_TU_DATASETS:
+        supported = ", ".join(("synthetic", *SUPPORTED_TU_DATASETS))
+        raise ValueError(f"Unsupported dataset {dataset!r}. Choose one of: {supported}.")
+    dataset_dir = data_root / dataset_name
+    try:
+        return load_tu_dataset(dataset_dir)
+    except FileNotFoundError as error:
+        command = (
+            ".venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset "
+            f"--dataset {dataset_name}"
+        )
+        raise FileNotFoundError(
+            f"{dataset_name} is missing required raw files under {dataset_dir}. "
+            f"Download it with: {command}"
+        ) from error
 
 
 def _build_kernel(

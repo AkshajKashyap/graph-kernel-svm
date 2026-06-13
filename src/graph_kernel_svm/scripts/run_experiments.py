@@ -172,7 +172,7 @@ def write_markdown_report(
     cache_hits = sum(result.cache_hit for result in results)
     interpretation = _build_interpretation(results, best_result)
     rows = [
-        "# MUTAG Kernel Comparison",
+        f"# {dataset} Kernel Comparison",
         "",
         "## Dataset Summary",
         "",
@@ -324,9 +324,13 @@ def main() -> None:
             *sys.argv[1:],
         ]
     )
-    csv_path = write_results_csv(results, "outputs/mutag_kernel_comparison.csv")
+    dataset_slug = args.dataset.lower()
+    csv_path = write_results_csv(
+        results,
+        f"outputs/{dataset_slug}_kernel_comparison.csv",
+    )
     config_path = write_experiment_config(
-        "outputs/mutag_kernel_comparison_config.json",
+        f"outputs/{dataset_slug}_kernel_comparison_config.json",
         dataset=args.dataset,
         n_splits=args.n_splits,
         test_size=args.test_size,
@@ -340,7 +344,7 @@ def main() -> None:
         summary=summary,
         dataset=args.dataset,
         command=command,
-        output_path="reports/mutag_kernel_comparison.md",
+        output_path=f"reports/{dataset_slug}_kernel_comparison.md",
     )
 
     for result in results:
