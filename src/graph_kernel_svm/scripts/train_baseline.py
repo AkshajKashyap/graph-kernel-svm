@@ -3,25 +3,33 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
-from graph_kernel_svm.data import load_synthetic_graph_classification
+from graph_kernel_svm.data import (
+    load_synthetic_graph_classification,
+    load_tu_dataset,
+    summarize_dataset,
+)
+from graph_kernel_svm.graphs import GraphExample
 from graph_kernel_svm.kernels import graph_stat_kernel, weisfeiler_lehman_subtree_kernel
 
 
 def train_baseline(
+    dataset: str = "synthetic",
+    data_root: str | Path = "data/raw",
     kernel: str = "stats",
     random_state: int = 42,
     wl_iterations: int = 3,
     normalize: bool = False,
 ) -> float:
-    """Train and evaluate SVC on the synthetic dataset."""
+    """Train and evaluate SVC on a graph-classification dataset."""
 
-    examples = load_synthetic_graph_classification()
+    examples = _load_dataset(dataset, Path(data_root))
     labels = np.array([example.label for example in examples])
     indices = np.arange(len(examples))
 
@@ -47,8 +55,14 @@ def train_baseline(
     return float(accuracy_score(labels[test_idx], predictions))
 
 
+def _load_dataset(dataset: str, data_root: Path) -> list[GraphExample]:
+    if dataset.lower() == "synthetic":
+        return load_synthetic_graph_classification()
+    return load_tu_dataset(data_root / dataset)
+
+
 def _build_kernel(
-    examples: list,
+    examples: list[GraphExample],
     kernel: str,
     wl_iterations: int,
     normalize: bool,
@@ -66,6 +80,8 @@ def _build_kernel(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dataset", default="synthetic")
+    parser.add_argument("--data-root", type=Path, default=Path("data/raw"))
     parser.add_argument("--kernel", choices=["stats", "wl"], default="stats")
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--wl-iterations", type=int, default=3)
@@ -75,7 +91,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    examples = _load_dataset(args.dataset, args.data_root)
+    summary = summarize_dataset(examples)
+    print(
+        f"dataset={args.dataset} graphs={summary.num_graphs} "
+        f"class_balance={summary.class_balance} "
+        f"avg_nodes={summary.avg_nodes:.2f} avg_edges={summary.avg_edges:.2f}"
+    )
     accuracy = train_baseline(
+        dataset=args.dataset,
+        data_root=args.data_root,
         kernel=args.kernel,
         random_state=args.random_state,
         wl_iterations=args.wl_iterations,
