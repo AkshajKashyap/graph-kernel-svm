@@ -66,8 +66,7 @@ def kernel_cache_key(
     encoded = json.dumps(setting, sort_keys=True, separators=(",", ":")).encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()[:20]
     dataset_slug = "".join(
-        character.lower() if character.isalnum() else "_"
-        for character in dataset_name
+        character.lower() if character.isalnum() else "_" for character in dataset_name
     ).strip("_")
     kernel_slug = kernel_name
     if kernel_name == "wl":

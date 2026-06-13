@@ -5,3 +5,6 @@ pycache/
 data/raw/
 outputs/
 reports/
+!reports/
+reports/*
+!reports/method_notes.md

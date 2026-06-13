@@ -43,9 +43,7 @@ def download_tu_dataset(
 
         extracted = temporary_path / dataset_name
         if not extracted.is_dir():
-            raise RuntimeError(
-                f"Downloaded archive does not contain a {dataset_name} directory."
-            )
+            raise RuntimeError(f"Downloaded archive does not contain a {dataset_name} directory.")
         if destination.exists():
             shutil.rmtree(destination)
         shutil.copytree(extracted, destination)

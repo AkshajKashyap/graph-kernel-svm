@@ -4,6 +4,7 @@ from pathlib import Path
 from graph_kernel_svm.scripts.plot_all_results import plot_all_results
 from graph_kernel_svm.scripts.run_all_experiments import (
     run_all_experiments,
+    write_all_diagnostics_report,
     write_all_results_csv,
     write_all_results_report,
 )
@@ -69,12 +70,33 @@ def test_multi_dataset_csv_report_and_plots(tmp_path: Path) -> None:
         summaries,
         "python -m graph_kernel_svm.scripts.run_all_experiments",
         tmp_path / "reports" / "all.md",
+        n_splits=1,
+        test_size=0.34,
+        seed=42,
+        normalize=False,
+        use_cache=False,
+        force_recompute=False,
+        timestamp="2026-06-13T12:00:00+00:00",
+    )
+    diagnostics_path = write_all_diagnostics_report(
+        results,
+        tmp_path / "reports" / "all_diagnostics.md",
+        command="python -m graph_kernel_svm.scripts.run_all_experiments",
+        n_splits=1,
+        test_size=0.34,
+        seed=42,
+        normalize=False,
+        c_values=[0.1, 1.0, 10.0],
+        use_cache=False,
+        force_recompute=False,
+        timestamp="2026-06-13T12:00:00+00:00",
     )
     figures = plot_all_results(csv_path, tmp_path / "figures")
 
     with csv_path.open(encoding="utf-8", newline="") as input_file:
         rows = list(csv.DictReader(input_file))
     report = report_path.read_text(encoding="utf-8")
+    diagnostics = diagnostics_path.read_text(encoding="utf-8")
 
     assert len(rows) == 16
     assert {row["dataset"] for row in rows} == {"MUTAG", "PROTEINS"}
@@ -85,6 +107,10 @@ def test_multi_dataset_csv_report_and_plots(tmp_path: Path) -> None:
     assert "## MUTAG" in report
     assert "## PROTEINS" in report
     assert "run_all_experiments" in report
+    assert "## Reproducibility Metadata" in report
+    assert "Datasets: `['MUTAG', 'PROTEINS']`" in report
+    assert "Best Method Confusion Matrix" in diagnostics
+    assert "C distribution" in diagnostics
     assert [path.name for path in figures] == [
         "all_datasets_best_macro_f1.png",
         "all_datasets_kernel_comparison.png",

@@ -1,91 +1,106 @@
 # graph-kernel-svm
 
-From-scratch graph kernels for graph classification with reproducible TU dataset experiments.
+A script-first graph classification project implementing graph-stat,
+Weisfeiler-Lehman subtree, and shortest-path kernels from scratch. It loads local TU
+Dortmund datasets, trains `SVC(kernel="precomputed")` models with leakage-safe inner
+`C` tuning, and produces cached, timed, reproducible experiment reports and figures.
 
-## What this project does
+## Why This Project Matters
 
-This project parses TU Dortmund graph datasets, computes graph kernel matrices,
-and trains scikit-learn SVM classifiers with `kernel="precomputed"`. It includes
-repeatable evaluation, kernel caching, timing, Markdown reports, and publication-ready
-comparison plots.
+Graph kernels provide an interpretable way to compare structured objects without
+learning a neural representation. This repository makes the full experimental path
+visible: parsing raw graph files, constructing kernel matrices, checking numerical
+health, tuning only on training data, measuring split variability, and recording the
+configuration needed to reproduce a result.
 
-Implemented kernels:
+## Quickstart
 
-- **Graph-stat baseline:** compares compact structural statistics such as graph size,
-  density, degree, components, and triangles.
-- **Weisfeiler-Lehman subtree kernel:** iteratively refines node labels from labeled
-  neighborhoods and compares the resulting label-frequency features.
-- **Shortest-path kernel:** compares labeled endpoint pairs grouped by shortest-path
-  distance.
-
-A precomputed SVM keeps kernel construction separate from classification, allowing the
-same train/test procedure to evaluate every custom kernel matrix. SVM `C` is tuned
-inside each training split using stratified inner cross-validation, so outer test
-examples never influence model selection.
-
-## Current Results
-
-Experiments support MUTAG, PTC_MR, and PROTEINS. The runner compares the graph-stat
-baseline, shortest-path kernel, and WL depths 0 through 5 over repeated stratified
-splits. Results vary by dataset because graph size, labels, and structural patterns
-differ, so evaluating multiple datasets gives a more useful picture than one benchmark.
+```bash
+python -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+make test
+make download-data
+make all-experiments
+make plots
+```
 
 ## Commands
 
-Download each dataset:
-
 ```bash
-.venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset --dataset MUTAG
-.venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset --dataset PTC_MR
-.venv/bin/python -m graph_kernel_svm.scripts.download_tu_dataset --dataset PROTEINS
+make install
+make test
+make lint
+make format-check
+make download-data
+make inspect
+make experiment
+make all-experiments
+make plots
+make clean-outputs
 ```
 
-Run tests:
-
-```bash
-.venv/bin/python -m pytest
-```
-
-Inspect the dataset:
-
-```bash
-.venv/bin/python -m graph_kernel_svm.scripts.inspect_dataset \
-  --dataset MUTAG --data-root data/raw
-```
-
-Run one baseline:
+Direct commands remain available:
 
 ```bash
 .venv/bin/python -m graph_kernel_svm.scripts.train_baseline \
-  --dataset MUTAG --kernel wl --normalize
-```
-
-Run the full experiment:
-
-```bash
-.venv/bin/python -m graph_kernel_svm.scripts.run_experiments \
-  --dataset MUTAG --data-root data/raw --n-splits 10 \
-  --test-size 0.25 --seed 42 --normalize --use-cache \
+  --dataset MUTAG --kernel wl --normalize \
   --c-values 0.1 1.0 10.0
 ```
 
-Run all supported datasets:
+## Current Results
 
-```bash
-.venv/bin/python -m graph_kernel_svm.scripts.run_all_experiments \
-  --datasets MUTAG PTC_MR PROTEINS --data-root data/raw \
-  --n-splits 10 --test-size 0.25 --seed 42 --normalize --use-cache \
-  --c-values 0.1 1.0 10.0
+Experiments support MUTAG, PTC_MR, and PROTEINS. Results vary by dataset and random
+split; the project does not claim state-of-the-art performance. Generated artifacts:
+
+- Per-dataset comparisons: `reports/{dataset}_kernel_comparison.md`
+- Per-dataset diagnostics: `reports/{dataset}_diagnostics.md`
+- Multi-dataset comparison: `reports/all_datasets_kernel_comparison.md`
+- Multi-dataset diagnostics: `reports/all_datasets_diagnostics.md`
+- Figures: `outputs/figures/`
+- Technical method details: [reports/method_notes.md](reports/method_notes.md)
+
+## Repository Structure
+
+```text
+src/graph_kernel_svm/
+  data/       TU and synthetic dataset loaders
+  graphs/     graph example data structures
+  kernels/    graph-stat, WL, and shortest-path kernels
+  models/     leakage-safe precomputed-SVM tuning
+  scripts/    download, inspect, train, experiment, and plot commands
+  utils/      caching and kernel diagnostics
+tests/        offline unit and integration tests
+reports/      method notes and generated Markdown reports
 ```
 
-Plot results:
+## Methods
 
-```bash
-.venv/bin/python -m graph_kernel_svm.scripts.plot_results
-.venv/bin/python -m graph_kernel_svm.scripts.plot_all_results
-```
+- **Graph-stat baseline:** a linear kernel over compact global graph statistics.
+- **WL subtree kernel:** counts deterministic neighborhood-refinement labels over
+  multiple iterations.
+- **Shortest-path kernel:** counts labeled endpoint pairs by shortest-path distance.
+- **Precomputed SVM:** consumes custom kernel slices while keeping classifier logic
+  consistent across methods.
 
-Raw datasets are stored under `data/raw/{DATASET_NAME}`. Combined metrics are written
-to `outputs/all_datasets_kernel_comparison.csv`, with the report at
-`reports/all_datasets_kernel_comparison.md`. Kernel matrices are cached under
-`outputs/cache/`; add `--force-recompute` to refresh matching entries.
+See [method notes](reports/method_notes.md) for implementation and evaluation details.
+
+## Reproducibility
+
+Reports record timestamps, datasets, split count, test size, random seed,
+normalization, C grid, cache settings, and the exact command. Diagnostics include
+per-class F1, confusion matrices, selected-C distributions, cache hits, and kernel
+matrix numerical checks. CI runs Ruff and pytest on Python 3.11 without downloading
+datasets.
+
+## Limitations
+
+- Kernels prioritize readable implementations over large-scale performance.
+- Continuous node attributes and edge labels are not currently used.
+- Reported estimates depend on small benchmark datasets and repeated random splits.
+- The experiment suite covers classical graph kernels only.
+
+## Next Steps
+
+- Profile and vectorize kernel construction for larger datasets.
+- Add support for continuous node attributes and edge labels.
+- Expand statistical comparison across repeated runs without changing model families.

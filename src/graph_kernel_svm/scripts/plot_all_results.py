@@ -53,8 +53,7 @@ def _plot_best_macro_f1(
 ) -> None:
     datasets = list(grouped)
     best_rows = [
-        max(rows, key=lambda row: float(row["mean_macro_f1"]))
-        for rows in grouped.values()
+        max(rows, key=lambda row: float(row["mean_macro_f1"])) for rows in grouped.values()
     ]
     values = [float(row["mean_macro_f1"]) for row in best_rows]
     labels = [row["setting"] for row in best_rows]
@@ -87,7 +86,9 @@ def _plot_kernel_comparison(
     figure, axis = plt.subplots(figsize=(12, 6))
     for index, setting in enumerate(settings):
         values = [
-            float(next(row["mean_macro_f1"] for row in grouped[dataset] if row["setting"] == setting))
+            float(
+                next(row["mean_macro_f1"] for row in grouped[dataset] if row["setting"] == setting)
+            )
             for dataset in datasets
         ]
         offsets = positions - 0.4 + width / 2 + index * width

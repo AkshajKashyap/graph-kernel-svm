@@ -43,9 +43,7 @@ def select_best_c(
         fold_scores = []
         for inner_train, inner_validation in splitter.split(train_kernel, train_labels):
             inner_train_kernel = train_kernel[np.ix_(inner_train, inner_train)]
-            inner_validation_kernel = train_kernel[
-                np.ix_(inner_validation, inner_train)
-            ]
+            inner_validation_kernel = train_kernel[np.ix_(inner_validation, inner_train)]
             classifier = SVC(kernel="precomputed", C=c_value)
             classifier.fit(inner_train_kernel, train_labels[inner_train])
             predictions = classifier.predict(inner_validation_kernel)

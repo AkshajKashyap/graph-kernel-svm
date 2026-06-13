@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.svm import SVC
 
@@ -22,7 +22,7 @@ from graph_kernel_svm.data import DatasetSummary, summarize_dataset
 from graph_kernel_svm.graphs import GraphExample
 from graph_kernel_svm.models import DEFAULT_C_VALUES, select_best_c
 from graph_kernel_svm.scripts.train_baseline import _build_kernel, _load_dataset
-from graph_kernel_svm.utils import get_kernel_matrix
+from graph_kernel_svm.utils import KernelDiagnostics, diagnose_kernel_matrix, get_kernel_matrix
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,10 @@ class ExperimentResult:
     kernel_time_seconds: float
     cache_hit: bool
     best_c: float
+    c_distribution: dict[float, int]
+    per_class_f1: dict[int, float]
+    confusion_matrix: list[list[int]]
+    kernel_diagnostics: KernelDiagnostics
 
     @property
     def setting(self) -> str:
@@ -64,6 +68,7 @@ def run_kernel_experiments(
         raise ValueError("test_size must be between 0 and 1.")
 
     labels = np.array([example.label for example in examples])
+    classes = np.unique(labels)
     splitter = StratifiedShuffleSplit(
         n_splits=n_splits,
         test_size=test_size,
@@ -98,6 +103,8 @@ def run_kernel_experiments(
         accuracies = []
         macro_f1_scores = []
         selected_c_values = []
+        per_class_f1_scores = []
+        aggregate_confusion = np.zeros((len(classes), len(classes)), dtype=int)
         for split_index, (train_indices, test_indices) in enumerate(splits):
             best_c = select_best_c(
                 kernel_matrix,
@@ -116,6 +123,20 @@ def run_kernel_experiments(
             macro_f1_scores.append(
                 f1_score(labels[test_indices], predictions, average="macro", zero_division=0)
             )
+            per_class_f1_scores.append(
+                f1_score(
+                    labels[test_indices],
+                    predictions,
+                    labels=classes,
+                    average=None,
+                    zero_division=0,
+                )
+            )
+            aggregate_confusion += confusion_matrix(
+                labels[test_indices],
+                predictions,
+                labels=classes,
+            )
 
         results.append(
             ExperimentResult(
@@ -128,6 +149,17 @@ def run_kernel_experiments(
                 kernel_time_seconds=cached_kernel.elapsed_seconds,
                 cache_hit=cached_kernel.cache_hit,
                 best_c=_most_common_c(selected_c_values, c_values),
+                c_distribution=dict(sorted(Counter(selected_c_values).items())),
+                per_class_f1={
+                    int(label): float(score)
+                    for label, score in zip(
+                        classes,
+                        np.mean(per_class_f1_scores, axis=0),
+                        strict=True,
+                    )
+                },
+                confusion_matrix=aggregate_confusion.tolist(),
+                kernel_diagnostics=diagnose_kernel_matrix(kernel_matrix),
             )
         )
     return results
@@ -167,9 +199,7 @@ def write_results_csv(results: list[ExperimentResult], output_path: str | Path) 
                 {
                     "setting": result.setting,
                     "kernel": result.kernel,
-                    "wl_iterations": (
-                        "" if result.wl_iterations is None else result.wl_iterations
-                    ),
+                    "wl_iterations": ("" if result.wl_iterations is None else result.wl_iterations),
                     "mean_accuracy": f"{result.mean_accuracy:.6f}",
                     "std_accuracy": f"{result.std_accuracy:.6f}",
                     "mean_macro_f1": f"{result.mean_macro_f1:.6f}",
@@ -188,6 +218,13 @@ def write_markdown_report(
     command: str,
     output_path: str | Path,
     c_values: Sequence[float] = DEFAULT_C_VALUES,
+    n_splits: int | None = None,
+    test_size: float | None = None,
+    seed: int | None = None,
+    normalize: bool | None = None,
+    use_cache: bool | None = None,
+    force_recompute: bool | None = None,
+    timestamp: str | None = None,
 ) -> Path:
     """Write a readable Markdown experiment report."""
 
@@ -199,6 +236,19 @@ def write_markdown_report(
     interpretation = _build_interpretation(results, best_result)
     rows = [
         f"# {dataset} Kernel Comparison",
+        "",
+        "## Reproducibility Metadata",
+        "",
+        f"- Timestamp: `{timestamp or datetime.now(timezone.utc).isoformat()}`",
+        f"- Dataset: `{dataset}`",
+        f"- Splits: `{n_splits if n_splits is not None else 'not recorded'}`",
+        f"- Test size: `{test_size if test_size is not None else 'not recorded'}`",
+        f"- Random seed: `{seed if seed is not None else 'not recorded'}`",
+        f"- Normalize kernels: `{normalize if normalize is not None else 'not recorded'}`",
+        f"- C grid: `{[float(value) for value in c_values]}`",
+        f"- Use cache: `{use_cache if use_cache is not None else 'not recorded'}`",
+        f"- Force recompute: "
+        f"`{force_recompute if force_recompute is not None else 'not recorded'}`",
         "",
         "## Dataset Summary",
         "",
@@ -213,7 +263,7 @@ def write_markdown_report(
         "- Graph-stat baseline using compact structural counts.",
         "- Shortest-path kernel using labeled endpoint and distance features.",
         "- Weisfeiler-Lehman subtree kernel with 0 through 5 refinement iterations.",
-        "- Every classifier is an `SVC(kernel=\"precomputed\")` evaluated on shared splits.",
+        '- Every classifier is an `SVC(kernel="precomputed")` evaluated on shared splits.',
         f"- C values searched inside each outer training split: "
         f"`{[float(value) for value in c_values]}`.",
         "",
@@ -230,6 +280,16 @@ def write_markdown_report(
         f"{result.kernel_time_seconds:.6f} | {result.best_c:g} |"
         for result in results
     )
+    rows.extend(
+        [
+            "",
+            "## Kernel Matrix Diagnostics",
+            "",
+            "| Setting | Shape | Symmetry error | Diagonal range | Min eigenvalue | Warning |",
+            "| --- | --- | ---: | --- | ---: | --- |",
+        ]
+    )
+    rows.extend(_kernel_diagnostic_row(result) for result in results)
     rows.extend(
         [
             "",
@@ -262,6 +322,96 @@ def write_markdown_report(
     return path
 
 
+def _kernel_diagnostic_row(result: ExperimentResult) -> str:
+    diagnostics = result.kernel_diagnostics
+    min_eigenvalue = (
+        "not computed"
+        if diagnostics.approximate_min_eigenvalue is None
+        else f"{diagnostics.approximate_min_eigenvalue:.3e}"
+    )
+    return (
+        f"| {result.setting} | {diagnostics.shape[0]} x {diagnostics.shape[1]} | "
+        f"{diagnostics.symmetry_error:.3e} | {diagnostics.min_diagonal:.3e} to "
+        f"{diagnostics.max_diagonal:.3e} | {min_eigenvalue} | "
+        f"{diagnostics.condition_warning or 'none'} |"
+    )
+
+
+def write_diagnostics_report(
+    results: list[ExperimentResult],
+    dataset: str,
+    output_path: str | Path,
+    *,
+    command: str,
+    n_splits: int,
+    test_size: float,
+    seed: int,
+    normalize: bool,
+    c_values: Sequence[float],
+    use_cache: bool,
+    force_recompute: bool,
+    timestamp: str,
+) -> Path:
+    """Write detailed classification, tuning, cache, and kernel diagnostics."""
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    best_result = max(results, key=lambda result: result.mean_macro_f1)
+    lines = [
+        f"# {dataset} Experiment Diagnostics",
+        "",
+        "## Reproducibility Metadata",
+        "",
+        f"- Timestamp: `{timestamp}`",
+        f"- Dataset: `{dataset}`",
+        f"- Splits: `{n_splits}`",
+        f"- Test size: `{test_size}`",
+        f"- Random seed: `{seed}`",
+        f"- Normalize kernels: `{normalize}`",
+        f"- C grid: `{[float(value) for value in c_values]}`",
+        f"- Use cache: `{use_cache}`",
+        f"- Force recompute: `{force_recompute}`",
+        "",
+        "## Method Diagnostics",
+        "",
+        "| Setting | Per-class F1 | Selected C distribution | Cache | Kernel warning |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    lines.extend(
+        f"| {result.setting} | `{result.per_class_f1}` | "
+        f"`{result.c_distribution}` | {'hit' if result.cache_hit else 'miss'} | "
+        f"{result.kernel_diagnostics.condition_warning or 'none'} |"
+        for result in results
+    )
+    lines.extend(
+        [
+            "",
+            f"## Best Method Confusion Matrix: {best_result.setting}",
+            "",
+            _format_confusion_matrix(best_result),
+            "",
+            "## Reproduction",
+            "",
+            "```bash",
+            command,
+            "```",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _format_confusion_matrix(result: ExperimentResult) -> str:
+    labels = list(result.per_class_f1)
+    header = "| Actual / Predicted | " + " | ".join(map(str, labels)) + " |"
+    divider = "| --- | " + " | ".join("---:" for _ in labels) + " |"
+    rows = [
+        f"| {label} | " + " | ".join(map(str, values)) + " |"
+        for label, values in zip(labels, result.confusion_matrix, strict=True)
+    ]
+    return "\n".join([header, divider, *rows])
+
+
 def _build_interpretation(
     results: list[ExperimentResult],
     best_result: ExperimentResult,
@@ -275,8 +425,7 @@ def _build_interpretation(
         )
     else:
         comparison = (
-            f"`{best_result.setting}` leads `{runner_up.setting}` by {margin:.4f} "
-            "mean macro F1."
+            f"`{best_result.setting}` leads `{runner_up.setting}` by {margin:.4f} mean macro F1."
         )
 
     wl_results = [result for result in results if result.kernel == "wl"]
@@ -362,6 +511,7 @@ def main() -> None:
             *sys.argv[1:],
         ]
     )
+    timestamp = datetime.now(timezone.utc).isoformat()
     dataset_slug = args.dataset.lower()
     csv_path = write_results_csv(
         results,
@@ -377,6 +527,7 @@ def main() -> None:
         use_cache=args.use_cache,
         force_recompute=args.force_recompute,
         c_values=args.c_values,
+        timestamp=timestamp,
     )
     report_path = write_markdown_report(
         results,
@@ -385,6 +536,27 @@ def main() -> None:
         command=command,
         output_path=f"reports/{dataset_slug}_kernel_comparison.md",
         c_values=args.c_values,
+        n_splits=args.n_splits,
+        test_size=args.test_size,
+        seed=args.seed,
+        normalize=args.normalize,
+        use_cache=args.use_cache,
+        force_recompute=args.force_recompute,
+        timestamp=timestamp,
+    )
+    diagnostics_path = write_diagnostics_report(
+        results,
+        args.dataset,
+        f"reports/{dataset_slug}_diagnostics.md",
+        command=command,
+        n_splits=args.n_splits,
+        test_size=args.test_size,
+        seed=args.seed,
+        normalize=args.normalize,
+        c_values=args.c_values,
+        use_cache=args.use_cache,
+        force_recompute=args.force_recompute,
+        timestamp=timestamp,
     )
 
     for result in results:
@@ -397,6 +569,7 @@ def main() -> None:
     print(f"csv={csv_path}")
     print(f"config={config_path}")
     print(f"report={report_path}")
+    print(f"diagnostics={diagnostics_path}")
 
 
 if __name__ == "__main__":

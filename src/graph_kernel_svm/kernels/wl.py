@@ -78,7 +78,9 @@ def _initial_node_labels(example: GraphExample) -> NodeLabels:
     }
 
 
-def _node_signatures(labels: NodeLabels, adjacency: Adjacency) -> dict[Hashable, tuple[str, tuple[str, ...]]]:
+def _node_signatures(
+    labels: NodeLabels, adjacency: Adjacency
+) -> dict[Hashable, tuple[str, tuple[str, ...]]]:
     return {
         node: (labels[node], tuple(sorted(labels[neighbor] for neighbor in neighbors)))
         for node, neighbors in adjacency.items()
@@ -88,7 +90,9 @@ def _node_signatures(labels: NodeLabels, adjacency: Adjacency) -> dict[Hashable,
 def _compress_signatures(
     signatures_by_graph: Sequence[dict[Hashable, tuple[str, tuple[str, ...]]]],
 ) -> dict[tuple[str, tuple[str, ...]], str]:
-    unique_signatures = sorted({signature for signatures in signatures_by_graph for signature in signatures.values()})
+    unique_signatures = sorted(
+        {signature for signatures in signatures_by_graph for signature in signatures.values()}
+    )
     return {signature: str(index) for index, signature in enumerate(unique_signatures)}
 
 

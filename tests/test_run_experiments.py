@@ -5,6 +5,7 @@ from pathlib import Path
 from graph_kernel_svm.data import load_synthetic_graph_classification, summarize_dataset
 from graph_kernel_svm.scripts.run_experiments import (
     run_kernel_experiments,
+    write_diagnostics_report,
     write_experiment_config,
     write_markdown_report,
     write_results_csv,
@@ -72,11 +73,33 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
         dataset="synthetic",
         command="python -m graph_kernel_svm.scripts.run_experiments --dataset synthetic",
         output_path=tmp_path / "reports" / "report.md",
+        n_splits=1,
+        test_size=0.4,
+        seed=42,
+        normalize=False,
+        use_cache=False,
+        force_recompute=False,
+        timestamp="2026-06-13T12:00:00+00:00",
+    )
+    diagnostics_path = write_diagnostics_report(
+        results,
+        dataset="synthetic",
+        output_path=tmp_path / "reports" / "diagnostics.md",
+        command="python -m graph_kernel_svm.scripts.run_experiments --dataset synthetic",
+        n_splits=1,
+        test_size=0.4,
+        seed=42,
+        normalize=False,
+        c_values=[0.1, 1.0, 10.0],
+        use_cache=False,
+        force_recompute=False,
+        timestamp="2026-06-13T12:00:00+00:00",
     )
 
     with csv_path.open(encoding="utf-8", newline="") as input_file:
         rows = list(csv.DictReader(input_file))
     report = report_path.read_text(encoding="utf-8")
+    diagnostics = diagnostics_path.read_text(encoding="utf-8")
 
     assert len(rows) == 8
     assert rows[0]["setting"] == "stats"
@@ -92,7 +115,14 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
     assert "most common selected C" in report
     assert "python -m graph_kernel_svm.scripts.run_experiments" in report
     assert "Kernel time (s)" in report
+    assert "## Kernel Matrix Diagnostics" in report
+    assert "## Reproducibility Metadata" in report
+    assert "2026-06-13T12:00:00+00:00" in report
+    assert "Random seed: `42`" in report
     assert "wl_5" in report
+    assert "Selected C distribution" in diagnostics
+    assert "Best Method Confusion Matrix" in diagnostics
+    assert "Cache" in diagnostics
 
 
 def test_experiment_config_is_saved(tmp_path: Path) -> None:
