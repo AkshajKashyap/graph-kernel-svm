@@ -19,7 +19,9 @@ Implemented kernels:
   distance.
 
 A precomputed SVM keeps kernel construction separate from classification, allowing the
-same train/test procedure to evaluate every custom kernel matrix.
+same train/test procedure to evaluate every custom kernel matrix. SVM `C` is tuned
+inside each training split using stratified inner cross-validation, so outer test
+examples never influence model selection.
 
 ## Current Results
 
@@ -63,7 +65,8 @@ Run the full experiment:
 ```bash
 .venv/bin/python -m graph_kernel_svm.scripts.run_experiments \
   --dataset MUTAG --data-root data/raw --n-splits 10 \
-  --test-size 0.25 --seed 42 --normalize --use-cache
+  --test-size 0.25 --seed 42 --normalize --use-cache \
+  --c-values 0.1 1.0 10.0
 ```
 
 Run all supported datasets:
@@ -71,7 +74,8 @@ Run all supported datasets:
 ```bash
 .venv/bin/python -m graph_kernel_svm.scripts.run_all_experiments \
   --datasets MUTAG PTC_MR PROTEINS --data-root data/raw \
-  --n-splits 10 --test-size 0.25 --seed 42 --normalize --use-cache
+  --n-splits 10 --test-size 0.25 --seed 42 --normalize --use-cache \
+  --c-values 0.1 1.0 10.0
 ```
 
 Plot results:

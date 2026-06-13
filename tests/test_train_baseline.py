@@ -38,3 +38,9 @@ def test_train_parser_accepts_cache_flags() -> None:
 
     assert args.use_cache is True
     assert args.force_recompute is True
+
+
+def test_train_parser_accepts_c_grid() -> None:
+    args = build_parser().parse_args(["--c-values", "0.01", "0.5", "5.0"])
+
+    assert args.c_values == [0.01, 0.5, 5.0]

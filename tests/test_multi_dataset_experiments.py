@@ -78,7 +78,10 @@ def test_multi_dataset_csv_report_and_plots(tmp_path: Path) -> None:
 
     assert len(rows) == 16
     assert {row["dataset"] for row in rows} == {"MUTAG", "PROTEINS"}
+    assert "best_c" in rows[0]
     assert "## Best Method by Dataset" in report
+    assert "Most common C" in report
+    assert "C values searched" in report
     assert "## MUTAG" in report
     assert "## PROTEINS" in report
     assert "run_all_experiments" in report

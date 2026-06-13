@@ -23,6 +23,7 @@ from graph_kernel_svm.kernels import (
     shortest_path_kernel,
     weisfeiler_lehman_subtree_kernel,
 )
+from graph_kernel_svm.models import DEFAULT_C_VALUES, select_best_c
 from graph_kernel_svm.utils import get_kernel_matrix
 
 
@@ -33,6 +34,7 @@ class TrainingResult:
     accuracy: float
     kernel_time_seconds: float
     cache_hit: bool
+    best_c: float
 
 
 def train_baseline(
@@ -45,6 +47,7 @@ def train_baseline(
     use_cache: bool = False,
     force_recompute: bool = False,
     cache_dir: str | Path = "outputs/cache",
+    c_values: tuple[float, ...] = DEFAULT_C_VALUES,
 ) -> float:
     """Train and evaluate SVC on a graph-classification dataset."""
 
@@ -59,6 +62,7 @@ def train_baseline(
         use_cache=use_cache,
         force_recompute=force_recompute,
         cache_dir=cache_dir,
+        c_values=c_values,
     )
     return result.accuracy
 
@@ -74,6 +78,7 @@ def _train_on_examples(
     use_cache: bool,
     force_recompute: bool,
     cache_dir: str | Path,
+    c_values: tuple[float, ...],
 ) -> TrainingResult:
     labels = np.array([example.label for example in examples])
     indices = np.arange(len(examples))
@@ -102,16 +107,24 @@ def _train_on_examples(
         ),
     )
     full_kernel = cached_kernel.matrix
+    best_c = select_best_c(
+        full_kernel,
+        labels,
+        train_idx,
+        c_values=c_values,
+        seed=random_state,
+    )
     train_kernel = full_kernel[np.ix_(train_idx, train_idx)]
     test_kernel = full_kernel[np.ix_(test_idx, train_idx)]
 
-    classifier = SVC(kernel="precomputed")
+    classifier = SVC(kernel="precomputed", C=best_c)
     classifier.fit(train_kernel, labels[train_idx])
     predictions = classifier.predict(test_kernel)
     return TrainingResult(
         accuracy=float(accuracy_score(labels[test_idx], predictions)),
         kernel_time_seconds=cached_kernel.elapsed_seconds,
         cache_hit=cached_kernel.cache_hit,
+        best_c=best_c,
     )
 
 
@@ -176,6 +189,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalize", action="store_true")
     parser.add_argument("--use-cache", action="store_true")
     parser.add_argument("--force-recompute", action="store_true")
+    parser.add_argument(
+        "--c-values",
+        nargs="+",
+        type=float,
+        default=list(DEFAULT_C_VALUES),
+    )
     return parser
 
 
@@ -198,11 +217,12 @@ def main() -> None:
         use_cache=args.use_cache,
         force_recompute=args.force_recompute,
         cache_dir="outputs/cache",
+        c_values=tuple(args.c_values),
     )
     print(
         f"accuracy={result.accuracy:.3f} "
         f"kernel_time_seconds={result.kernel_time_seconds:.6f} "
-        f"cache_hit={result.cache_hit}"
+        f"cache_hit={result.cache_hit} best_c={result.best_c:g}"
     )
 
 

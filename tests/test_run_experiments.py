@@ -31,6 +31,7 @@ def test_experiment_aggregation_covers_all_kernel_settings() -> None:
     assert all(result.std_accuracy >= 0.0 for result in results)
     assert all(result.std_macro_f1 >= 0.0 for result in results)
     assert all(result.kernel_time_seconds >= 0.0 for result in results)
+    assert all(result.best_c in {0.1, 1.0, 10.0} for result in results)
 
 
 def test_experiment_aggregation_is_deterministic() -> None:
@@ -81,11 +82,14 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
     assert rows[0]["setting"] == "stats"
     assert rows[1]["setting"] == "shortest_path"
     assert "kernel_time_seconds" in rows[0]
+    assert "best_c" in rows[0]
     assert "# synthetic Kernel Comparison" in report
     assert "## Dataset Summary" in report
     assert "## Reproduction" in report
     assert "## Best Method" in report
     assert "highest mean macro F1" in report
+    assert "C values searched" in report
+    assert "most common selected C" in report
     assert "python -m graph_kernel_svm.scripts.run_experiments" in report
     assert "Kernel time (s)" in report
     assert "wl_5" in report
@@ -114,5 +118,6 @@ def test_experiment_config_is_saved(tmp_path: Path) -> None:
         "normalize": True,
         "use_cache": True,
         "force_recompute": False,
+        "c_values": [0.1, 1.0, 10.0],
         "timestamp": "2026-06-13T12:00:00+00:00",
     }

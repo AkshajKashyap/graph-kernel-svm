@@ -6,9 +6,11 @@ import argparse
 import csv
 import shlex
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from graph_kernel_svm.data import SUPPORTED_TU_DATASETS, DatasetSummary, summarize_dataset
+from graph_kernel_svm.models import DEFAULT_C_VALUES
 from graph_kernel_svm.scripts.run_experiments import ExperimentResult, run_kernel_experiments
 from graph_kernel_svm.scripts.train_baseline import _load_dataset
 
@@ -24,6 +26,7 @@ def run_all_experiments(
     use_cache: bool = False,
     force_recompute: bool = False,
     cache_dir: str | Path = "outputs/cache",
+    c_values: Sequence[float] = DEFAULT_C_VALUES,
 ) -> tuple[dict[str, list[ExperimentResult]], dict[str, DatasetSummary]]:
     """Run the existing kernel comparison for each requested dataset."""
 
@@ -43,6 +46,7 @@ def run_all_experiments(
             use_cache=use_cache,
             force_recompute=force_recompute,
             cache_dir=cache_dir,
+            c_values=c_values,
         )
     return results_by_dataset, summaries
 
@@ -68,6 +72,7 @@ def write_all_results_csv(
                 "mean_macro_f1",
                 "std_macro_f1",
                 "kernel_time_seconds",
+                "best_c",
             ],
         )
         writer.writeheader()
@@ -86,6 +91,7 @@ def write_all_results_csv(
                         "mean_macro_f1": f"{result.mean_macro_f1:.6f}",
                         "std_macro_f1": f"{result.std_macro_f1:.6f}",
                         "kernel_time_seconds": f"{result.kernel_time_seconds:.6f}",
+                        "best_c": f"{result.best_c:g}",
                     }
                 )
     return path
@@ -96,6 +102,7 @@ def write_all_results_report(
     summaries: dict[str, DatasetSummary],
     command: str,
     output_path: str | Path,
+    c_values: Sequence[float] = DEFAULT_C_VALUES,
 ) -> Path:
     """Write per-dataset result tables and a best-method summary."""
 
@@ -108,13 +115,17 @@ def write_all_results_report(
     lines = [
         "# Multi-Dataset Graph Kernel Comparison",
         "",
+        f"C values searched within each outer training split: "
+        f"`{[float(value) for value in c_values]}`.",
+        "",
         "## Best Method by Dataset",
         "",
-        "| Dataset | Best method | Mean macro F1 | Mean accuracy |",
-        "| --- | --- | ---: | ---: |",
+        "| Dataset | Best method | Most common C | Mean macro F1 | Mean accuracy |",
+        "| --- | --- | ---: | ---: | ---: |",
     ]
     lines.extend(
-        f"| {dataset} | {result.setting} | {result.mean_macro_f1:.4f} | "
+        f"| {dataset} | {result.setting} | {result.best_c:g} | "
+        f"{result.mean_macro_f1:.4f} | "
         f"{result.mean_accuracy:.4f} |"
         for dataset, result in best_results.items()
     )
@@ -131,14 +142,15 @@ def write_all_results_report(
                 f"average edges: {summary.avg_edges:.2f}.",
                 "",
                 "| Setting | Mean accuracy | Std accuracy | Mean macro F1 | "
-                "Std macro F1 | Kernel time (s) |",
-                "| --- | ---: | ---: | ---: | ---: | ---: |",
+                "Std macro F1 | Kernel time (s) | Most common C |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         lines.extend(
             f"| {result.setting} | {result.mean_accuracy:.4f} | "
             f"{result.std_accuracy:.4f} | {result.mean_macro_f1:.4f} | "
-            f"{result.std_macro_f1:.4f} | {result.kernel_time_seconds:.6f} |"
+            f"{result.std_macro_f1:.4f} | {result.kernel_time_seconds:.6f} | "
+            f"{result.best_c:g} |"
             for result in results
         )
 
@@ -171,6 +183,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalize", action="store_true")
     parser.add_argument("--use-cache", action="store_true")
     parser.add_argument("--force-recompute", action="store_true")
+    parser.add_argument(
+        "--c-values",
+        nargs="+",
+        type=float,
+        default=list(DEFAULT_C_VALUES),
+    )
     return parser
 
 
@@ -185,6 +203,7 @@ def main() -> None:
         normalize=args.normalize,
         use_cache=args.use_cache,
         force_recompute=args.force_recompute,
+        c_values=args.c_values,
     )
     command = shlex.join(
         [
@@ -203,6 +222,7 @@ def main() -> None:
         summaries,
         command,
         "reports/all_datasets_kernel_comparison.md",
+        c_values=args.c_values,
     )
     print(f"csv={csv_path}")
     print(f"report={report_path}")

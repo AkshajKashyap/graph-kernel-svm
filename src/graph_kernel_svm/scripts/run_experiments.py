@@ -7,6 +7,8 @@ import csv
 import json
 import shlex
 import sys
+from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +20,7 @@ from sklearn.svm import SVC
 
 from graph_kernel_svm.data import DatasetSummary, summarize_dataset
 from graph_kernel_svm.graphs import GraphExample
+from graph_kernel_svm.models import DEFAULT_C_VALUES, select_best_c
 from graph_kernel_svm.scripts.train_baseline import _build_kernel, _load_dataset
 from graph_kernel_svm.utils import get_kernel_matrix
 
@@ -34,6 +37,7 @@ class ExperimentResult:
     std_macro_f1: float
     kernel_time_seconds: float
     cache_hit: bool
+    best_c: float
 
     @property
     def setting(self) -> str:
@@ -50,6 +54,7 @@ def run_kernel_experiments(
     use_cache: bool = False,
     force_recompute: bool = False,
     cache_dir: str | Path = "outputs/cache",
+    c_values: Sequence[float] = DEFAULT_C_VALUES,
 ) -> list[ExperimentResult]:
     """Evaluate stats, shortest-path, and WL kernels on shared splits."""
 
@@ -92,12 +97,21 @@ def run_kernel_experiments(
         kernel_matrix = cached_kernel.matrix
         accuracies = []
         macro_f1_scores = []
-        for train_indices, test_indices in splits:
+        selected_c_values = []
+        for split_index, (train_indices, test_indices) in enumerate(splits):
+            best_c = select_best_c(
+                kernel_matrix,
+                labels,
+                train_indices,
+                c_values=c_values,
+                seed=seed + split_index,
+            )
             train_kernel = kernel_matrix[np.ix_(train_indices, train_indices)]
             test_kernel = kernel_matrix[np.ix_(test_indices, train_indices)]
-            classifier = SVC(kernel="precomputed")
+            classifier = SVC(kernel="precomputed", C=best_c)
             classifier.fit(train_kernel, labels[train_indices])
             predictions = classifier.predict(test_kernel)
+            selected_c_values.append(best_c)
             accuracies.append(accuracy_score(labels[test_indices], predictions))
             macro_f1_scores.append(
                 f1_score(labels[test_indices], predictions, average="macro", zero_division=0)
@@ -113,9 +127,18 @@ def run_kernel_experiments(
                 std_macro_f1=float(np.std(macro_f1_scores)),
                 kernel_time_seconds=cached_kernel.elapsed_seconds,
                 cache_hit=cached_kernel.cache_hit,
+                best_c=_most_common_c(selected_c_values, c_values),
             )
         )
     return results
+
+
+def _most_common_c(
+    selected_values: list[float],
+    c_values: Sequence[float],
+) -> float:
+    counts = Counter(selected_values)
+    return max((float(value) for value in c_values), key=lambda value: counts[value])
 
 
 def write_results_csv(results: list[ExperimentResult], output_path: str | Path) -> Path:
@@ -135,6 +158,7 @@ def write_results_csv(results: list[ExperimentResult], output_path: str | Path) 
                 "mean_macro_f1",
                 "std_macro_f1",
                 "kernel_time_seconds",
+                "best_c",
             ],
         )
         writer.writeheader()
@@ -151,6 +175,7 @@ def write_results_csv(results: list[ExperimentResult], output_path: str | Path) 
                     "mean_macro_f1": f"{result.mean_macro_f1:.6f}",
                     "std_macro_f1": f"{result.std_macro_f1:.6f}",
                     "kernel_time_seconds": f"{result.kernel_time_seconds:.6f}",
+                    "best_c": f"{result.best_c:g}",
                 }
             )
     return path
@@ -162,6 +187,7 @@ def write_markdown_report(
     dataset: str,
     command: str,
     output_path: str | Path,
+    c_values: Sequence[float] = DEFAULT_C_VALUES,
 ) -> Path:
     """Write a readable Markdown experiment report."""
 
@@ -188,18 +214,20 @@ def write_markdown_report(
         "- Shortest-path kernel using labeled endpoint and distance features.",
         "- Weisfeiler-Lehman subtree kernel with 0 through 5 refinement iterations.",
         "- Every classifier is an `SVC(kernel=\"precomputed\")` evaluated on shared splits.",
+        f"- C values searched inside each outer training split: "
+        f"`{[float(value) for value in c_values]}`.",
         "",
         "## Results",
         "",
         "| Setting | Mean accuracy | Std accuracy | Mean macro F1 | Std macro F1 | "
-        "Kernel time (s) |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "Kernel time (s) | Most common C |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     rows.extend(
         "| "
         f"{result.setting} | {result.mean_accuracy:.4f} | {result.std_accuracy:.4f} | "
         f"{result.mean_macro_f1:.4f} | {result.std_macro_f1:.4f} | "
-        f"{result.kernel_time_seconds:.6f} |"
+        f"{result.kernel_time_seconds:.6f} | {result.best_c:g} |"
         for result in results
     )
     rows.extend(
@@ -209,7 +237,8 @@ def write_markdown_report(
             "",
             f"`{best_result.setting}` achieved the highest mean macro F1 "
             f"({best_result.mean_macro_f1:.4f}) with mean accuracy "
-            f"{best_result.mean_accuracy:.4f}.",
+            f"{best_result.mean_accuracy:.4f}. Its most common selected C was "
+            f"`{best_result.best_c:g}`.",
             "",
             "## Interpretation",
             "",
@@ -269,6 +298,7 @@ def write_experiment_config(
     normalize: bool,
     use_cache: bool,
     force_recompute: bool,
+    c_values: Sequence[float] = DEFAULT_C_VALUES,
     timestamp: str | None = None,
 ) -> Path:
     """Save experiment configuration as JSON."""
@@ -283,6 +313,7 @@ def write_experiment_config(
         "normalize": normalize,
         "use_cache": use_cache,
         "force_recompute": force_recompute,
+        "c_values": [float(value) for value in c_values],
         "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
     }
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
@@ -299,6 +330,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalize", action="store_true")
     parser.add_argument("--use-cache", action="store_true")
     parser.add_argument("--force-recompute", action="store_true")
+    parser.add_argument(
+        "--c-values",
+        nargs="+",
+        type=float,
+        default=list(DEFAULT_C_VALUES),
+    )
     return parser
 
 
@@ -315,6 +352,7 @@ def main() -> None:
         dataset_name=args.dataset,
         use_cache=args.use_cache,
         force_recompute=args.force_recompute,
+        c_values=args.c_values,
     )
     command = shlex.join(
         [
@@ -338,6 +376,7 @@ def main() -> None:
         normalize=args.normalize,
         use_cache=args.use_cache,
         force_recompute=args.force_recompute,
+        c_values=args.c_values,
     )
     report_path = write_markdown_report(
         results,
@@ -345,6 +384,7 @@ def main() -> None:
         dataset=args.dataset,
         command=command,
         output_path=f"reports/{dataset_slug}_kernel_comparison.md",
+        c_values=args.c_values,
     )
 
     for result in results:
@@ -352,7 +392,7 @@ def main() -> None:
             f"{result.setting}: accuracy={result.mean_accuracy:.3f}+/-{result.std_accuracy:.3f} "
             f"macro_f1={result.mean_macro_f1:.3f}+/-{result.std_macro_f1:.3f} "
             f"kernel_time_seconds={result.kernel_time_seconds:.6f} "
-            f"cache_hit={result.cache_hit}"
+            f"cache_hit={result.cache_hit} best_c={result.best_c:g}"
         )
     print(f"csv={csv_path}")
     print(f"config={config_path}")
