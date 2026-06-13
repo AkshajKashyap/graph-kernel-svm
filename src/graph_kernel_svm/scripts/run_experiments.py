@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import shlex
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -165,6 +167,10 @@ def write_markdown_report(
 
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    best_result = max(results, key=lambda result: result.mean_macro_f1)
+    fastest_result = min(results, key=lambda result: result.kernel_time_seconds)
+    cache_hits = sum(result.cache_hit for result in results)
+    interpretation = _build_interpretation(results, best_result)
     rows = [
         "# MUTAG Kernel Comparison",
         "",
@@ -176,11 +182,12 @@ def write_markdown_report(
         f"- Average nodes: {summary.avg_nodes:.2f}",
         f"- Average edges: {summary.avg_edges:.2f}",
         "",
-        "## Reproduction",
+        "## Methods Compared",
         "",
-        "```bash",
-        command,
-        "```",
+        "- Graph-stat baseline using compact structural counts.",
+        "- Shortest-path kernel using labeled endpoint and distance features.",
+        "- Weisfeiler-Lehman subtree kernel with 0 through 5 refinement iterations.",
+        "- Every classifier is an `SVC(kernel=\"precomputed\")` evaluated on shared splits.",
         "",
         "## Results",
         "",
@@ -195,7 +202,90 @@ def write_markdown_report(
         f"{result.kernel_time_seconds:.6f} |"
         for result in results
     )
+    rows.extend(
+        [
+            "",
+            "## Best Method",
+            "",
+            f"`{best_result.setting}` achieved the highest mean macro F1 "
+            f"({best_result.mean_macro_f1:.4f}) with mean accuracy "
+            f"{best_result.mean_accuracy:.4f}.",
+            "",
+            "## Interpretation",
+            "",
+            interpretation,
+            "",
+            "## Timing and Cache Notes",
+            "",
+            f"- Fastest recorded kernel step: `{fastest_result.setting}` "
+            f"at {fastest_result.kernel_time_seconds:.6f} seconds.",
+            f"- Cache hits: {cache_hits} of {len(results)} settings.",
+            "- Kernel time measures matrix retrieval or computation, including cache I/O.",
+            "",
+            "## Reproduction",
+            "",
+            "```bash",
+            command,
+            "```",
+        ]
+    )
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return path
+
+
+def _build_interpretation(
+    results: list[ExperimentResult],
+    best_result: ExperimentResult,
+) -> str:
+    runner_up = sorted(results, key=lambda result: result.mean_macro_f1, reverse=True)[1]
+    margin = best_result.mean_macro_f1 - runner_up.mean_macro_f1
+    if margin <= 0.001:
+        comparison = (
+            f"The leading methods are effectively tied: `{best_result.setting}` and "
+            f"`{runner_up.setting}` differ by only {margin:.4f} mean macro F1."
+        )
+    else:
+        comparison = (
+            f"`{best_result.setting}` leads `{runner_up.setting}` by {margin:.4f} "
+            "mean macro F1."
+        )
+
+    wl_results = [result for result in results if result.kernel == "wl"]
+    best_wl = max(wl_results, key=lambda result: result.mean_macro_f1)
+    return (
+        f"{comparison} The strongest WL depth is `{best_wl.setting}` "
+        f"with mean macro F1 {best_wl.mean_macro_f1:.4f}. "
+        "Differences should be read alongside split variability and kernel runtime."
+    )
+
+
+def write_experiment_config(
+    output_path: str | Path,
+    *,
+    dataset: str,
+    n_splits: int,
+    test_size: float,
+    seed: int,
+    normalize: bool,
+    use_cache: bool,
+    force_recompute: bool,
+    timestamp: str | None = None,
+) -> Path:
+    """Save experiment configuration as JSON."""
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    config = {
+        "dataset": dataset,
+        "n_splits": n_splits,
+        "test_size": test_size,
+        "seed": seed,
+        "normalize": normalize,
+        "use_cache": use_cache,
+        "force_recompute": force_recompute,
+        "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+    }
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -235,6 +325,16 @@ def main() -> None:
         ]
     )
     csv_path = write_results_csv(results, "outputs/mutag_kernel_comparison.csv")
+    config_path = write_experiment_config(
+        "outputs/mutag_kernel_comparison_config.json",
+        dataset=args.dataset,
+        n_splits=args.n_splits,
+        test_size=args.test_size,
+        seed=args.seed,
+        normalize=args.normalize,
+        use_cache=args.use_cache,
+        force_recompute=args.force_recompute,
+    )
     report_path = write_markdown_report(
         results,
         summary=summary,
@@ -251,6 +351,7 @@ def main() -> None:
             f"cache_hit={result.cache_hit}"
         )
     print(f"csv={csv_path}")
+    print(f"config={config_path}")
     print(f"report={report_path}")
 
 

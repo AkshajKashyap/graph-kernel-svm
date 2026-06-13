@@ -1,9 +1,11 @@
 import csv
+import json
 from pathlib import Path
 
 from graph_kernel_svm.data import load_synthetic_graph_classification, summarize_dataset
 from graph_kernel_svm.scripts.run_experiments import (
     run_kernel_experiments,
+    write_experiment_config,
     write_markdown_report,
     write_results_csv,
 )
@@ -82,5 +84,35 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
     assert "# MUTAG Kernel Comparison" in report
     assert "## Dataset Summary" in report
     assert "## Reproduction" in report
+    assert "## Best Method" in report
+    assert "highest mean macro F1" in report
+    assert "python -m graph_kernel_svm.scripts.run_experiments" in report
     assert "Kernel time (s)" in report
     assert "wl_5" in report
+
+
+def test_experiment_config_is_saved(tmp_path: Path) -> None:
+    config_path = write_experiment_config(
+        tmp_path / "config.json",
+        dataset="synthetic",
+        n_splits=3,
+        test_size=0.4,
+        seed=7,
+        normalize=True,
+        use_cache=True,
+        force_recompute=False,
+        timestamp="2026-06-13T12:00:00+00:00",
+    )
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert config == {
+        "dataset": "synthetic",
+        "n_splits": 3,
+        "test_size": 0.4,
+        "seed": 7,
+        "normalize": True,
+        "use_cache": True,
+        "force_recompute": False,
+        "timestamp": "2026-06-13T12:00:00+00:00",
+    }
