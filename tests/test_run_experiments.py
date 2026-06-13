@@ -28,6 +28,7 @@ def test_experiment_aggregation_covers_all_kernel_settings() -> None:
     assert all(0.0 <= result.mean_macro_f1 <= 1.0 for result in results)
     assert all(result.std_accuracy >= 0.0 for result in results)
     assert all(result.std_macro_f1 >= 0.0 for result in results)
+    assert all(result.kernel_time_seconds >= 0.0 for result in results)
 
 
 def test_experiment_aggregation_is_deterministic() -> None:
@@ -36,7 +37,25 @@ def test_experiment_aggregation_is_deterministic() -> None:
     first = run_kernel_experiments(examples, n_splits=2, test_size=0.4, seed=11)
     second = run_kernel_experiments(examples, n_splits=2, test_size=0.4, seed=11)
 
-    assert first == second
+    assert [
+        (
+            result.setting,
+            result.mean_accuracy,
+            result.std_accuracy,
+            result.mean_macro_f1,
+            result.std_macro_f1,
+        )
+        for result in first
+    ] == [
+        (
+            result.setting,
+            result.mean_accuracy,
+            result.std_accuracy,
+            result.mean_macro_f1,
+            result.std_macro_f1,
+        )
+        for result in second
+    ]
 
 
 def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
@@ -59,7 +78,9 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
     assert len(rows) == 8
     assert rows[0]["setting"] == "stats"
     assert rows[1]["setting"] == "shortest_path"
+    assert "kernel_time_seconds" in rows[0]
     assert "# MUTAG Kernel Comparison" in report
     assert "## Dataset Summary" in report
     assert "## Reproduction" in report
+    assert "Kernel time (s)" in report
     assert "wl_5" in report

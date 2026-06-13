@@ -17,6 +17,7 @@ from sklearn.svm import SVC
 from graph_kernel_svm.data import DatasetSummary, summarize_dataset
 from graph_kernel_svm.graphs import GraphExample
 from graph_kernel_svm.scripts.train_baseline import _build_kernel, _load_dataset
+from graph_kernel_svm.utils import get_kernel_matrix
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,8 @@ class ExperimentResult:
     std_accuracy: float
     mean_macro_f1: float
     std_macro_f1: float
+    kernel_time_seconds: float
+    cache_hit: bool
 
     @property
     def setting(self) -> str:
@@ -41,6 +44,10 @@ def run_kernel_experiments(
     test_size: float = 0.25,
     seed: int = 42,
     normalize: bool = False,
+    dataset_name: str = "synthetic",
+    use_cache: bool = False,
+    force_recompute: bool = False,
+    cache_dir: str | Path = "outputs/cache",
 ) -> list[ExperimentResult]:
     """Evaluate stats, shortest-path, and WL kernels on shared splits."""
 
@@ -64,12 +71,23 @@ def run_kernel_experiments(
 
     results = []
     for kernel_name, wl_iterations in settings:
-        kernel_matrix = _build_kernel(
-            examples,
-            kernel=kernel_name,
-            wl_iterations=wl_iterations or 0,
+        cached_kernel = get_kernel_matrix(
+            examples=examples,
+            dataset_name=dataset_name,
+            kernel_name=kernel_name,
             normalize=normalize,
+            wl_iterations=wl_iterations,
+            use_cache=use_cache,
+            force_recompute=force_recompute,
+            cache_dir=cache_dir,
+            compute=lambda kernel_name=kernel_name, wl_iterations=wl_iterations: _build_kernel(
+                examples,
+                kernel=kernel_name,
+                wl_iterations=wl_iterations or 0,
+                normalize=normalize,
+            ),
         )
+        kernel_matrix = cached_kernel.matrix
         accuracies = []
         macro_f1_scores = []
         for train_indices, test_indices in splits:
@@ -91,6 +109,8 @@ def run_kernel_experiments(
                 std_accuracy=float(np.std(accuracies)),
                 mean_macro_f1=float(np.mean(macro_f1_scores)),
                 std_macro_f1=float(np.std(macro_f1_scores)),
+                kernel_time_seconds=cached_kernel.elapsed_seconds,
+                cache_hit=cached_kernel.cache_hit,
             )
         )
     return results
@@ -112,6 +132,7 @@ def write_results_csv(results: list[ExperimentResult], output_path: str | Path) 
                 "std_accuracy",
                 "mean_macro_f1",
                 "std_macro_f1",
+                "kernel_time_seconds",
             ],
         )
         writer.writeheader()
@@ -127,6 +148,7 @@ def write_results_csv(results: list[ExperimentResult], output_path: str | Path) 
                     "std_accuracy": f"{result.std_accuracy:.6f}",
                     "mean_macro_f1": f"{result.mean_macro_f1:.6f}",
                     "std_macro_f1": f"{result.std_macro_f1:.6f}",
+                    "kernel_time_seconds": f"{result.kernel_time_seconds:.6f}",
                 }
             )
     return path
@@ -162,13 +184,15 @@ def write_markdown_report(
         "",
         "## Results",
         "",
-        "| Setting | Mean accuracy | Std accuracy | Mean macro F1 | Std macro F1 |",
-        "| --- | ---: | ---: | ---: | ---: |",
+        "| Setting | Mean accuracy | Std accuracy | Mean macro F1 | Std macro F1 | "
+        "Kernel time (s) |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     rows.extend(
         "| "
         f"{result.setting} | {result.mean_accuracy:.4f} | {result.std_accuracy:.4f} | "
-        f"{result.mean_macro_f1:.4f} | {result.std_macro_f1:.4f} |"
+        f"{result.mean_macro_f1:.4f} | {result.std_macro_f1:.4f} | "
+        f"{result.kernel_time_seconds:.6f} |"
         for result in results
     )
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
@@ -183,6 +207,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--test-size", type=float, default=0.25)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--normalize", action="store_true")
+    parser.add_argument("--use-cache", action="store_true")
+    parser.add_argument("--force-recompute", action="store_true")
     return parser
 
 
@@ -196,6 +222,9 @@ def main() -> None:
         test_size=args.test_size,
         seed=args.seed,
         normalize=args.normalize,
+        dataset_name=args.dataset,
+        use_cache=args.use_cache,
+        force_recompute=args.force_recompute,
     )
     command = shlex.join(
         [
@@ -217,7 +246,9 @@ def main() -> None:
     for result in results:
         print(
             f"{result.setting}: accuracy={result.mean_accuracy:.3f}+/-{result.std_accuracy:.3f} "
-            f"macro_f1={result.mean_macro_f1:.3f}+/-{result.std_macro_f1:.3f}"
+            f"macro_f1={result.mean_macro_f1:.3f}+/-{result.std_macro_f1:.3f} "
+            f"kernel_time_seconds={result.kernel_time_seconds:.6f} "
+            f"cache_hit={result.cache_hit}"
         )
     print(f"csv={csv_path}")
     print(f"report={report_path}")

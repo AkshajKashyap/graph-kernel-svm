@@ -31,3 +31,10 @@ def test_train_parser_accepts_shortest_path_kernel() -> None:
     args = build_parser().parse_args(["--kernel", "shortest_path"])
 
     assert args.kernel == "shortest_path"
+
+
+def test_train_parser_accepts_cache_flags() -> None:
+    args = build_parser().parse_args(["--use-cache", "--force-recompute"])
+
+    assert args.use_cache is True
+    assert args.force_recompute is True
