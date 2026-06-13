@@ -3,3 +3,5 @@ pycache/
 .pytest_cache/
 .env
 data/raw/
+outputs/
+reports/

@@ -17,6 +17,7 @@ dependencies = [
 [project.scripts]
 graph-kernel-svm-train = "graph_kernel_svm.scripts.train_baseline:main"
 graph-kernel-svm-download-mutag = "graph_kernel_svm.scripts.download_mutag:main"
+graph-kernel-svm-experiments = "graph_kernel_svm.scripts.run_experiments:main"
 
 [project.optional-dependencies]
 dev = [

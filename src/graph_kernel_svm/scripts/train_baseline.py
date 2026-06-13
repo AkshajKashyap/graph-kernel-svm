@@ -68,7 +68,8 @@ def _build_kernel(
     normalize: bool,
 ) -> np.ndarray:
     if kernel == "stats":
-        return graph_stat_kernel(examples)
+        kernel_matrix = graph_stat_kernel(examples)
+        return _normalize_kernel(kernel_matrix) if normalize else kernel_matrix
     if kernel == "wl":
         return weisfeiler_lehman_subtree_kernel(
             examples,
@@ -76,6 +77,12 @@ def _build_kernel(
             normalize=normalize,
         )
     raise ValueError(f"Unsupported kernel: {kernel}")
+
+
+def _normalize_kernel(kernel: np.ndarray) -> np.ndarray:
+    diagonal = np.diag(kernel)
+    scale = np.sqrt(np.outer(diagonal, diagonal))
+    return np.divide(kernel, scale, out=np.zeros_like(kernel), where=scale > 0)
 
 
 def build_parser() -> argparse.ArgumentParser:
