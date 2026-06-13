@@ -42,7 +42,7 @@ def run_kernel_experiments(
     seed: int = 42,
     normalize: bool = False,
 ) -> list[ExperimentResult]:
-    """Evaluate stats and WL kernels on shared repeated stratified splits."""
+    """Evaluate stats, shortest-path, and WL kernels on shared splits."""
 
     if n_splits < 1:
         raise ValueError("n_splits must be at least 1.")
@@ -56,7 +56,11 @@ def run_kernel_experiments(
         random_state=seed,
     )
     splits = list(splitter.split(np.zeros(len(examples)), labels))
-    settings = [("stats", None), *(("wl", iteration) for iteration in range(6))]
+    settings = [
+        ("stats", None),
+        ("shortest_path", None),
+        *(("wl", iteration) for iteration in range(6)),
+    ]
 
     results = []
     for kernel_name, wl_iterations in settings:

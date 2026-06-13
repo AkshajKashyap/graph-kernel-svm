@@ -16,6 +16,7 @@ def test_experiment_aggregation_covers_all_kernel_settings() -> None:
 
     assert [result.setting for result in results] == [
         "stats",
+        "shortest_path",
         "wl_0",
         "wl_1",
         "wl_2",
@@ -55,8 +56,9 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
         rows = list(csv.DictReader(input_file))
     report = report_path.read_text(encoding="utf-8")
 
-    assert len(rows) == 7
+    assert len(rows) == 8
     assert rows[0]["setting"] == "stats"
+    assert rows[1]["setting"] == "shortest_path"
     assert "# MUTAG Kernel Comparison" in report
     assert "## Dataset Summary" in report
     assert "## Reproduction" in report

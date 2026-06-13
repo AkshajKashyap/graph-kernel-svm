@@ -16,7 +16,11 @@ from graph_kernel_svm.data import (
     summarize_dataset,
 )
 from graph_kernel_svm.graphs import GraphExample
-from graph_kernel_svm.kernels import graph_stat_kernel, weisfeiler_lehman_subtree_kernel
+from graph_kernel_svm.kernels import (
+    graph_stat_kernel,
+    shortest_path_kernel,
+    weisfeiler_lehman_subtree_kernel,
+)
 
 
 def train_baseline(
@@ -70,6 +74,8 @@ def _build_kernel(
     if kernel == "stats":
         kernel_matrix = graph_stat_kernel(examples)
         return _normalize_kernel(kernel_matrix) if normalize else kernel_matrix
+    if kernel == "shortest_path":
+        return shortest_path_kernel(examples, normalize=normalize)
     if kernel == "wl":
         return weisfeiler_lehman_subtree_kernel(
             examples,
@@ -89,7 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default="synthetic")
     parser.add_argument("--data-root", type=Path, default=Path("data/raw"))
-    parser.add_argument("--kernel", choices=["stats", "wl"], default="stats")
+    parser.add_argument(
+        "--kernel",
+        choices=["stats", "wl", "shortest_path"],
+        default="stats",
+    )
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--wl-iterations", type=int, default=3)
     parser.add_argument("--normalize", action="store_true")
