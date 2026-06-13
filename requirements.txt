@@ -1,0 +1,9 @@
+numpy
+pandas
+scikit-learn
+networkx
+scipy
+joblib
+matplotlib
+pytest
+ruff
