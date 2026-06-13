@@ -111,6 +111,11 @@ def test_multi_dataset_csv_report_and_plots(tmp_path: Path) -> None:
     assert "Datasets: `['MUTAG', 'PROTEINS']`" in report
     assert "Best Method Confusion Matrix" in diagnostics
     assert "C distribution" in diagnostics
+    assert "| Dataset | Best method | Most common C |" in report
+    assert "| --- | --- | ---: |" in report
+    assert "| `0.1` |" in report
+    assert "| `miss` |" in diagnostics
+    assert "| `none` |" in diagnostics
     assert [path.name for path in figures] == [
         "all_datasets_best_macro_f1.png",
         "all_datasets_kernel_comparison.png",

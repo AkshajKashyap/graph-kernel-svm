@@ -149,7 +149,7 @@ def write_all_results_report(
         "| --- | --- | ---: | ---: | ---: |",
     ]
     lines.extend(
-        f"| {dataset} | {result.setting} | {result.best_c:g} | "
+        f"| {dataset} | {result.setting} | `{result.best_c:g}` | "
         f"{result.mean_macro_f1:.4f} | "
         f"{result.mean_accuracy:.4f} |"
         for dataset, result in best_results.items()
@@ -175,7 +175,7 @@ def write_all_results_report(
             f"| {result.setting} | {result.mean_accuracy:.4f} | "
             f"{result.std_accuracy:.4f} | {result.mean_macro_f1:.4f} | "
             f"{result.std_macro_f1:.4f} | {result.kernel_time_seconds:.6f} | "
-            f"{result.best_c:g} |"
+            f"`{result.best_c:g}` |"
             for result in results
         )
 
@@ -270,8 +270,8 @@ def _all_diagnostics_row(result: ExperimentResult) -> str:
     )
     return (
         f"| {result.setting} | `{result.per_class_f1}` | `{result.c_distribution}` | "
-        f"{'hit' if result.cache_hit else 'miss'} | {diagnostics.symmetry_error:.3e} | "
-        f"{min_eigenvalue} | {diagnostics.condition_warning or 'none'} |"
+        f"`{'hit' if result.cache_hit else 'miss'}` | {diagnostics.symmetry_error:.3e} | "
+        f"{min_eigenvalue} | `{diagnostics.condition_warning or 'none'}` |"
     )
 
 

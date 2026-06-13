@@ -277,7 +277,7 @@ def write_markdown_report(
         "| "
         f"{result.setting} | {result.mean_accuracy:.4f} | {result.std_accuracy:.4f} | "
         f"{result.mean_macro_f1:.4f} | {result.std_macro_f1:.4f} | "
-        f"{result.kernel_time_seconds:.6f} | {result.best_c:g} |"
+        f"{result.kernel_time_seconds:.6f} | `{result.best_c:g}` |"
         for result in results
     )
     rows.extend(
@@ -333,7 +333,7 @@ def _kernel_diagnostic_row(result: ExperimentResult) -> str:
         f"| {result.setting} | {diagnostics.shape[0]} x {diagnostics.shape[1]} | "
         f"{diagnostics.symmetry_error:.3e} | {diagnostics.min_diagonal:.3e} to "
         f"{diagnostics.max_diagonal:.3e} | {min_eigenvalue} | "
-        f"{diagnostics.condition_warning or 'none'} |"
+        f"`{diagnostics.condition_warning or 'none'}` |"
     )
 
 
@@ -379,8 +379,8 @@ def write_diagnostics_report(
     ]
     lines.extend(
         f"| {result.setting} | `{result.per_class_f1}` | "
-        f"`{result.c_distribution}` | {'hit' if result.cache_hit else 'miss'} | "
-        f"{result.kernel_diagnostics.condition_warning or 'none'} |"
+        f"`{result.c_distribution}` | `{'hit' if result.cache_hit else 'miss'}` | "
+        f"`{result.kernel_diagnostics.condition_warning or 'none'}` |"
         for result in results
     )
     lines.extend(

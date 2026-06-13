@@ -123,6 +123,11 @@ def test_experiment_outputs_csv_and_markdown(tmp_path: Path) -> None:
     assert "Selected C distribution" in diagnostics
     assert "Best Method Confusion Matrix" in diagnostics
     assert "Cache" in diagnostics
+    assert "| Setting | Mean accuracy |" in report
+    assert "| --- | ---: |" in report
+    assert "| `none` |" in report
+    assert "| `0.1` |" in report
+    assert "| `miss` | `none` |" in diagnostics
 
 
 def test_experiment_config_is_saved(tmp_path: Path) -> None:
